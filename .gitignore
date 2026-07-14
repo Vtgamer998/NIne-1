@@ -1,0 +1,23 @@
+# checkpoints
+*.pt
+*.pth
+*.bin
+*.q8.bin
+*.meta
+
+# data
+nine/data/corpus*.bin
+nine/data/corpus*.txt
+nine/data/*.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+
+# os
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,8 @@
+# NINE-1: torch>=2.1.0 (Flash-attention via scaled_dot_product_attention)
+# Para CPU no Termux (celular Android):
+#   pkg install python && pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.1.0
+numpy>=1.24
+# para fine-tune otimizado:
+# peft>=0.10
+# bitsandbytes>=0.43

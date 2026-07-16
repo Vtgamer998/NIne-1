@@ -53,12 +53,17 @@ def is_safe_path(path: str) -> bool:
     return ".." not in path.split(os.sep) and not os.path.isabs(path)
 
 
-def is_text_file(path: str) -> bool:
-    """Verifica heuristicamente se o arquivo parece texto (le apenas os primeiros 8KB)."""
+def is_text_content(content: bytes) -> bool:
+    """Verifica heuristicamente se conteudo parece texto (primeiros 8KB).
+
+    Args:
+        content: Conteudo bytes a verificar.
+
+    Returns:
+        True se parece texto UTF-8 valido.
+    """
     try:
-        with open(path, "rb") as f:
-            head = f.read(8192)
-        head.decode("utf-8")
+        content[:8192].decode("utf-8")
         return True
     except (UnicodeDecodeError, IOError):
         return False
@@ -126,7 +131,7 @@ def read_file_safe(path: str) -> str:
     with open(path, "rb") as f:
         content = f.read()
 
-    if not is_text_file(path):
+    if not is_text_content(content):
         raise ValueError(f"Arquivo parece ser binario: {path}")
 
     return content.decode("utf-8", errors="ignore")

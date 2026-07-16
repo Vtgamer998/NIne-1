@@ -424,7 +424,12 @@ class NINE1(nn.Module):
             )
             return logits, loss, new_kv_caches
         else:
-            logits = self.lm_head(x[:, [-1], :])
+            # Retorna logits COMPLETOS (B, T, V) mesmo sem targets
+            # para compatibilidade com DPO e outras losses que precisam
+            # de log-probabilidades de todas as posicoes.
+            # No caso de geracao com um unico token (KV cache),
+            # x tem shape (B, 1, C) e logits (B, 1, V), mesmo efeito.
+            logits = self.lm_head(x)
             return logits, None, new_kv_caches
 
     @torch.no_grad()

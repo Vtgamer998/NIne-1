@@ -122,8 +122,17 @@ class NINE1Engine:
         top_k: int = 40,
         top_p: Optional[float] = None,
         max_tokens: int = 256,
+        format_instruct: bool = False,
     ) -> Generator[str, None, None]:
         """Gera tokens um a um com streaming.
+
+        Args:
+            prompt: Texto de entrada.
+            temperature: Temperatura de amostragem.
+            top_k: Top-K sampling (0 para desligar).
+            top_p: Top-P nucleus sampling (None para desligar).
+            max_tokens: Maximo de tokens a gerar.
+            format_instruct: Se True, envolve prompt no formato # tarefa / # solucao.
 
         Yields:
             Strings parciais do texto gerado.
@@ -133,15 +142,17 @@ class NINE1Engine:
             yield "Por favor, digite um prompt valido."
             return
 
+        # Formata para instruct mode se solicitado
+        if format_instruct:
+            formatted_prompt = f"# tarefa: {prompt}\n# solucao:\n"
+        else:
+            formatted_prompt = prompt
+
         # Codifica prompt
-        input_ids = self.encode(prompt)
+        input_ids = self.encode(formatted_prompt)
         if input_ids.numel() == 0:
             yield "Erro ao codificar prompt."
             return
-
-        # Formata para instruct mode
-        formatted_prompt = f"# tarefa: {prompt}\n# solucao:\n"
-        input_ids = self.encode(formatted_prompt)
 
         ids = input_ids.clone()
         tokens_generated = 0
@@ -192,10 +203,12 @@ class NINE1Engine:
         top_k: int = 40,
         top_p: Optional[float] = None,
         max_tokens: int = 256,
+        format_instruct: bool = False,
     ) -> str:
         """Gera texto completo (sem streaming)."""
         return "".join(self.generate_stream(
-            prompt, temperature, top_k, top_p, max_tokens
+            prompt, temperature, top_k, top_p, max_tokens,
+            format_instruct=format_instruct,
         ))
 
 
@@ -222,24 +235,22 @@ def create_ui(engine: NINE1Engine, args) -> None:
             mode: Modo de prompt ("chat" ou "instruct").
 
         Yields:
-            (history_atualizado, partial_text) para streaming.
+            history_atualizado (sem partial) para streaming.
         """
         if not message or not message.strip():
-            yield history, ""
+            yield history
             return
 
         if mode == "instruct":
-            # Modo instruct: formato tarefa/solucao
             prompt = message
+            format_instruct = True
         else:
-            # Modo chat: formata com contexto do historico
             system_prompt = (
                 "Voce e uma IA de programacao em portugues chamada NINE-1. "
                 "Responda com codigo Python quando apropriado. "
                 "Sempre gere codigo seguro e bem escrito."
             )
 
-            # Monta contexto do historico (ultimas 3 trocas)
             context = system_prompt + "\n\n"
             if history:
                 recent = history[-6:]
@@ -251,31 +262,31 @@ def create_ui(engine: NINE1Engine, args) -> None:
 
             context += f"Usuario: {message}\nNINE-1:"
             prompt = context
+            format_instruct = False
 
-        # Tokens de configuracao
         adjusted_max = min(max_tokens, MAX_NEW_TOKENS)
         top_p_val = top_p if top_p > 0 else None
 
-        # Gera streaming
         history.append([message, ""])
         partial = ""
 
         try:
             for token_chunk in engine.generate_stream(
-                prompt=message if mode == "instruct" else prompt,
+                prompt=prompt,
                 temperature=temperature,
                 top_k=int(top_k) if top_k > 0 else None,
                 top_p=top_p_val,
                 max_tokens=adjusted_max,
+                format_instruct=format_instruct,
             ):
                 partial += token_chunk
                 history[-1][1] = partial
-                yield history, partial
+                yield history
         except Exception as e:
             error_msg = f"\n\n[Erro na geracao: {e}]"
             partial += error_msg
             history[-1][1] = partial
-            yield history, partial
+            yield history
 
     # --- Layout ---
     with gr.Blocks(
@@ -393,10 +404,10 @@ def create_ui(engine: NINE1Engine, args) -> None:
         outputs = [chatbot, msg]
 
         def submit_and_clear(message, chat_history, temp, k, p, tokens, md):
-            """Gera e depois limpa o input."""
+            """Gera, atualiza chatbot, e limpa o input."""
             gen = chat_fn(message, chat_history, temp, k, p, tokens, md)
-            yield from gen
-            # Apos geracao completa, limpa o input
+            for history_state in gen:
+                yield history_state, ""
 
         # Submit (textbox enter)
         msg.submit(

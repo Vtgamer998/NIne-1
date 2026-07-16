@@ -1,4 +1,4 @@
-"""Tests do NINE-1"""
+"""Tests do NINE-1 (v0.3.0 - seguranca)"""
 
 import os
 import sys
@@ -9,9 +9,14 @@ import torch
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from nine.tokenizer import BPETokenizer
-from nine.model import NINE1, tiny_config
+from nine.tokenizer import BPETokenizer, validate_token_ids, sanitize_filename_component
+from nine.model import NINE1, tiny_config, small_config, validate_checkpoint_state, safe_load_checkpoint
+from nine.data import TextDataset
 
+
+# ============================================================================
+# Tests do Tokenizer
+# ============================================================================
 
 def test_tokenizer_basic():
     bt = BPETokenizer(vocab_size=300)
@@ -41,6 +46,57 @@ def test_tokenizer_ptbr_accents():
     text = bt.decode(ids)
     assert texto == text, f"PT-BR round-trip falhou: {text!r} != {texto!r}"
 
+
+def test_tokenizer_encode_empty():
+    bt = BPETokenizer(vocab_size=100)
+    bt.train("abc def ghi\n" * 10, verbose=False)
+    ids = bt.encode("")
+    # Texto vazio pode retornar lista vazia ou com BOS
+    assert isinstance(ids, list)
+    ids_bos = bt.encode("", add_bos=True)
+    assert isinstance(ids_bos, list)
+
+
+# ============================================================================
+# Tests de seguranca do Tokenizer
+# ============================================================================
+
+def test_tokenizer_validate_ids():
+    assert validate_token_ids([0, 1, 2], 512), "IDs validos falharam"
+    assert not validate_token_ids([-1], 512), "ID negativo passou"
+    assert not validate_token_ids([999999], 512), "ID muito grande passou"
+    assert not validate_token_ids([], 512), "Lista vazia passou"
+
+
+def test_tokenizer_decode_seguro():
+    bt = BPETokenizer(vocab_size=100)
+    bt.train("abc def\n" * 10, verbose=False)
+    # IDs maliciosos nao devem quebrar
+    safe = bt.decode([-1, 999999, 0])
+    assert isinstance(safe, str), f"decode seguro falhou: {type(safe)}"
+
+
+def test_sanitize_filename():
+    assert sanitize_filename_component("normal.txt") == "normal.txt"
+    assert "/" not in sanitize_filename_component("a/b/c")
+    assert "\\" not in sanitize_filename_component("a\\b")
+
+
+def test_tokenizer_encode_limits():
+    bt = BPETokenizer(vocab_size=100)
+    bt.train("test " * 100, verbose=False)
+    from nine.tokenizer import MAX_ENCODE_CHARS
+    texto_grande = "x" * (MAX_ENCODE_CHARS + 1)
+    try:
+        bt.encode(texto_grande)
+        assert False, "Deveria ter levantado ValueError"
+    except ValueError:
+        pass
+
+
+# ============================================================================
+# Tests do Modelo
+# ============================================================================
 
 def test_model_forward():
     cfg = tiny_config(vocab_size=512, block_size=128)
@@ -93,13 +149,139 @@ def test_model_param_count():
     assert 1_000_000 < n < 100_000_000
 
 
+def test_model_configs():
+    for name, cfg_fn in [("tiny", tiny_config), ("small", small_config)]:
+        cfg = cfg_fn()
+        m = NINE1(cfg)
+        x = torch.randint(0, cfg.vocab_size, (1, 16))
+        logits, _, _ = m(x)
+        assert logits is not None
+        print(f"  {name}: {m.num_params()/1e6:.2f}M params OK")
+
+
+# ============================================================================
+# Tests de seguranca do Modelo
+# ============================================================================
+
+def test_model_validate_input():
+    cfg = tiny_config(vocab_size=512)
+    m = NINE1(cfg)
+    # IDs validos
+    assert m.validate_input_ids(torch.tensor([[0, 1, 2, 511]]))
+    # IDs negativos
+    assert not m.validate_input_ids(torch.tensor([[-1, 0, 1]]))
+    # IDs fora do vocab
+    assert not m.validate_input_ids(torch.tensor([[0, 512, 1000]]))
+    # dtype errado
+    assert not m.validate_input_ids(torch.tensor([[0, 1]], dtype=torch.float32))
+
+
+def test_model_generate_temperature_clamp():
+    cfg = tiny_config(vocab_size=512, block_size=128)
+    m = NINE1(cfg)
+    m.eval()
+    x = torch.randint(0, cfg.vocab_size, (1, 16))
+    # Temperatura 0 (ou negativa) deve ser clamped
+    out = m.generate(x, max_new_tokens=5, temperature=0.0, top_k=1)
+    assert out.shape[1] >= 16  # Prompt preservado; pode parar antes se encontrar PAD
+
+
+def test_model_checkpoint_validation():
+    cfg = tiny_config(vocab_size=512)
+    m = NINE1(cfg)
+    state = {"model": m.state_dict(), "cfg": cfg.__dict__}
+    issues = validate_checkpoint_state(state["model"], cfg)
+    assert not issues, f"Issues encontrados: {issues}"
+
+    # Adiciona NaN
+    bad_state = dict(state["model"])
+    for k in list(bad_state.keys())[:1]:
+        bad_state[k] = torch.full_like(bad_state[k], float("nan"))
+    bad_issues = validate_checkpoint_state(bad_state, cfg)
+    nan_issues = [i for i in bad_issues if "NaN" in i]
+    assert len(nan_issues) > 0, "Deveria ter detectado NaN"
+
+
+def test_model_generate_max_tokens_limit():
+    cfg = tiny_config(vocab_size=512, block_size=128)
+    m = NINE1(cfg)
+    m.eval()
+    x = torch.randint(0, cfg.vocab_size, (1, 16))
+    # max_new_tokens negativo deve ser clamped
+    out = m.generate(x, max_new_tokens=-10, temperature=1.0, top_k=1)
+    assert out is not None
+    # max_new_tokens muito grande deve ser limitado
+    out2 = m.generate(x, max_new_tokens=9999, temperature=1.0, top_k=1)
+    assert out2.shape[1] <= 16 + cfg.block_size  # max_new_tokens limitado por block_size
+
+
+# ============================================================================
+# Tests do Dataset
+# ============================================================================
+
+def test_text_dataset_basic():
+    import numpy as np
+    fake_data = np.array(list(range(1000)), dtype=np.uint16)
+    ds = TextDataset(fake_data, block_size=32)
+    assert len(ds) > 0
+    x, y = ds[0]
+    assert x.shape == (32,)
+    assert y.shape == (32,)
+
+
+# ============================================================================
+# Main
+# ============================================================================
+
 if __name__ == "__main__":
+    print("=== NINE-1 Tests (v0.3.0) ===\n")
+
+    # Tokenizer tests
     test_tokenizer_basic()
+    print("[ok] test_tokenizer_basic")
     test_tokenizer_roundtrip()
+    print("[ok] test_tokenizer_roundtrip")
     test_tokenizer_ptbr_accents()
+    print("[ok] test_tokenizer_ptbr_accents")
+    test_tokenizer_encode_empty()
+    print("[ok] test_tokenizer_encode_empty")
+
+    # Security tests
+    test_tokenizer_validate_ids()
+    print("[ok] test_tokenizer_validate_ids")
+    test_tokenizer_decode_seguro()
+    print("[ok] test_tokenizer_decode_seguro")
+    test_sanitize_filename()
+    print("[ok] test_sanitize_filename")
+    test_tokenizer_encode_limits()
+    print("[ok] test_tokenizer_encode_limits")
+
+    # Model tests
     test_model_forward()
+    print("[ok] test_model_forward")
     test_model_generate()
+    print("[ok] test_model_generate")
     test_model_generate_with_cache()
+    print("[ok] test_model_generate_with_cache")
     test_model_kv_cache()
+    print("[ok] test_model_kv_cache")
     test_model_param_count()
-    print("[ok] Todos os testes basicos passaram.")
+    print("[ok] test_model_param_count")
+    test_model_configs()
+    print("[ok] test_model_configs")
+
+    # Security model tests
+    test_model_validate_input()
+    print("[ok] test_model_validate_input")
+    test_model_generate_temperature_clamp()
+    print("[ok] test_model_generate_temperature_clamp")
+    test_model_checkpoint_validation()
+    print("[ok] test_model_checkpoint_validation")
+    test_model_generate_max_tokens_limit()
+    print("[ok] test_model_generate_max_tokens_limit")
+
+    # Dataset tests
+    test_text_dataset_basic()
+    print("[ok] test_text_dataset_basic")
+
+    print("\n=== Todos os testes passaram! ===")

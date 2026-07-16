@@ -1,3 +1,4 @@
+
 def fibonacci(n):
     """Retorna o n-esimo termo de Fibonacci."""
     if n < 2:

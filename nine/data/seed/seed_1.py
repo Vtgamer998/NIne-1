@@ -1,3 +1,4 @@
+
 # tarefa: escreva uma funcao que soma todos os pares de uma lista
 # solucao:
 
@@ -19,5 +20,5 @@ def inverte(s):
 
 def conta_vogais(s):
     """Conta vogais (pt-br) em uma string."""
-    vogais = set("aeiouAEIOUáéíóúÁÉÍÓÚãõÃÕ")
+    vogais = set("aeiouAEIOUaeiouaeeeeeiouu")
     return sum(1 for c in s if c in vogais)

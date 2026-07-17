@@ -95,12 +95,21 @@ def load_fused_model(
         if "transformer.wpe.weight" in state:
             cfg_dict["block_size"] = state["transformer.wpe.weight"].size(0)
 
+    # Se o checkpoint e pre-GQA (usa c_attn), provalvemente tambem e pre-RoPE
+    # Nesse caso, use_rope deve ser False se nao estiver explicitamente no config
+    has_old_c_attn_hint = any("c_attn" in k for k in (ckpt.get("model", ckpt).keys()))
+    if has_old_c_attn_hint and "use_rope" not in cfg_dict:
+        cfg_dict["use_rope"] = False
+        if verbose:
+            print("[fuse] Checkpoint antigo detectado: use_rope=False (WPE legado)")
+
     # Filtra apenas os campos esperados por NINEConfig para evitar TypeError
     cfg = NINEConfig.from_dict(cfg_dict)
 
     if verbose:
         print(f"[fuse] Config: vocab={cfg.vocab_size}, block={cfg.block_size}, "
-              f"layers={cfg.n_layer}, heads={cfg.n_head}")
+              f"layers={cfg.n_layer}, heads={cfg.n_head}, "
+              f"RoPE={cfg.use_rope}, n_kv_heads={cfg.n_kv_heads}")
 
     model = NINE1(cfg)
 

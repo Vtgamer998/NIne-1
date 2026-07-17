@@ -295,8 +295,8 @@ def main():
                    help="checkpoint LoRA (.pt) opcional")
     p.add_argument("--tok", type=str, default="nine/data/nine1-tok.json",
                    help="arquivo BPE tokenizer JSON")
-    p.add_argument("--mode", choices=["base", "instruct", "chat"], default="base",
-                   help="modo de prompt")
+    p.add_argument("--mode", choices=["base", "instruct", "chat"], default="instruct",
+                   help="modo de prompt (default: instruct para melhor resultado)")
     p.add_argument("--tokens", type=int, default=120, help="tokens a gerar")
     p.add_argument("--temp", type=float, default=0.8)
     p.add_argument("--top_k", type=int, default=40)
@@ -376,10 +376,10 @@ def main():
 
     else:
         if not args.prompt:
-            if args.mode == "instruct":
-                args.prompt = "escreva uma funcao fibonacci iterativa em python"
-            else:
+            if args.mode == "base":
                 args.prompt = "def fala_oi():\n    "
+            else:
+                args.prompt = "escreva uma funcao fibonacci iterativa em python"
 
         # Sanitiza prompt
         args.prompt = sanitize_prompt(args.prompt)

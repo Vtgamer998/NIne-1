@@ -28,9 +28,30 @@ if [ -n "$MISSING" ]; then
     exit 1
 fi
 
-CKPT="nine/data/nine1-base.pt"
-TOK="nine/data/nine1-tok.json"
-LORA="nine/data/nine1-instruct.pt"
+# Auto-detect: prefere checkpoint grande (-g) se existir
+CKPT_BASE="nine/data/nine1-base.pt"
+CKPT_G="nine/data/nine1-base-g.pt"
+if [ -f "$CKPT_G" ] && [ $(stat -c%s "$CKPT_G") -gt 50000000 ]; then
+    CKPT="$CKPT_G"
+else
+    CKPT="$CKPT_BASE"
+fi
+
+TOK_BASE="nine/data/nine1-tok.json"
+TOK_G="nine/data/nine1-tok-g.json"
+if [ -f "$TOK_G" ]; then
+    TOK="$TOK_G"
+else
+    TOK="$TOK_BASE"
+fi
+
+LORA_BASE="nine/data/nine1-instruct.pt"
+LORA_G="nine/data/nine1-lora-g.pt"
+if [ -f "$LORA_G" ]; then
+    LORA="$LORA_G"
+else
+    LORA="$LORA_BASE"
+fi
 
 # Verifica checkpoint
 if [ ! -f "$CKPT" ]; then
@@ -40,8 +61,18 @@ fi
 
 echo "=== NINE-1 Web UI ==="
 echo "Checkpoint: $CKPT"
+if [ -f "$CKPT" ]; then
+    echo "  Size:     $(du -h "$CKPT" | cut -f1)"
+fi
 echo "Tokenizer:  $TOK"
 echo "LoRA:       $LORA"
+if [ -f "$LORA" ]; then
+    echo "  Size:     $(du -h "$LORA" | cut -f1)"
+fi
+echo ""
+
+echo "[Dica] Use o modo instruct para melhores resultados!"
+echo "  Ex: 'escreva uma funcao fibonacci em python'"
 echo ""
 
 python -m nine.webui \

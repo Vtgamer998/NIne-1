@@ -27,12 +27,12 @@ from .fuse import load_fused_model
 
 MAX_CONTEXT_TOKENS = 2048
 MAX_NEW_TOKENS = 512
-TITLE = "🐉 NINE-1 — IA de Programação em PT-BR"
+TITLE = "NINE-1 — IA de Programacao em PT-BR"
 DESCRIPTION = """
-**NINE-1** é uma IA de geração de código construída do zero, 
-especializada em Python e descrições em **português brasileiro**.
+**NINE-1** e uma IA de geracao de codigo construida do zero,
+especializada em Python e descricoes em **portugues brasileiro**.
 
-Digite um prompt em PT-BR para gerar código Python!
+Digite um prompt em PT-BR para gerar codigo Python!
 """
 THEME = "soft"  # Gradio theme
 
@@ -40,13 +40,13 @@ CSS = """
 <style>
     .gradio-container { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
     .chat-message { border-radius: 12px !important; }
-    .user-message { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; 
+    .user-message { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                     color: white !important; }
-    .bot-message { background: #1a1a2e !important; border: 1px solid #667eea !important; 
+    .bot-message { background: #1a1a2e !important; border: 1px solid #667eea !important;
                    color: #e0e0e0 !important; }
-    code { background: #2d2d2d !important; padding: 2px 6px !important; 
+    code { background: #2d2d2d !important; padding: 2px 6px !important;
            border-radius: 4px !important; font-size: 0.9em; }
-    pre { background: #1a1a2e !important; border: 1px solid #333 !important; 
+    pre { background: #1a1a2e !important; border: 1px solid #333 !important;
           border-radius: 8px !important; padding: 12px !important; overflow-x: auto !important; }
 </style>
 """
@@ -118,18 +118,18 @@ class NINE1Engine:
     def generate_stream(
         self,
         prompt: str,
-        temperature: float = 0.8,
-        top_k: int = 40,
+        temperature: float = 0.4,
+        top_k: int = 20,
         top_p: Optional[float] = None,
         max_tokens: int = 256,
-        format_instruct: bool = False,
+        format_instruct: bool = True,
     ) -> Generator[str, None, None]:
         """Gera tokens um a um com streaming.
 
         Args:
             prompt: Texto de entrada.
-            temperature: Temperatura de amostragem.
-            top_k: Top-K sampling (0 para desligar).
+            temperature: Temperatura de amostragem (default 0.4 para modelo pequeno).
+            top_k: Top-K sampling (default 20).
             top_p: Top-P nucleus sampling (None para desligar).
             max_tokens: Maximo de tokens a gerar.
             format_instruct: Se True, envolve prompt no formato # tarefa / # solucao.
@@ -142,7 +142,7 @@ class NINE1Engine:
             yield "Por favor, digite um prompt valido."
             return
 
-        # Formata para instruct mode se solicitado
+        # Formata para instruct mode (recomendado para este modelo)
         if format_instruct:
             formatted_prompt = f"# tarefa: {prompt}\n# solucao:\n"
         else:
@@ -199,11 +199,11 @@ class NINE1Engine:
     def generate(
         self,
         prompt: str,
-        temperature: float = 0.8,
-        top_k: int = 40,
+        temperature: float = 0.4,
+        top_k: int = 20,
         top_p: Optional[float] = None,
         max_tokens: int = 256,
-        format_instruct: bool = False,
+        format_instruct: bool = True,
     ) -> str:
         """Gera texto completo (sem streaming)."""
         return "".join(self.generate_stream(
@@ -222,7 +222,7 @@ def create_ui(engine: NINE1Engine, args) -> None:
 
     def chat_fn(message: str, history: list, temperature: float,
                 top_k: int, top_p: float, max_tokens: int,
-                mode: str = "chat"):
+                mode: str = "instruct"):
         """Funcao de chat chamada pelo Gradio.
 
         Args:
@@ -235,7 +235,7 @@ def create_ui(engine: NINE1Engine, args) -> None:
             mode: Modo de prompt ("chat" ou "instruct").
 
         Yields:
-            history_atualizado (sem partial) para streaming.
+            history_atualizado para streaming.
         """
         if not message or not message.strip():
             yield history
@@ -245,6 +245,7 @@ def create_ui(engine: NINE1Engine, args) -> None:
             prompt = message
             format_instruct = True
         else:
+            # Modo chat: constroi contexto com historico
             system_prompt = (
                 "Voce e uma IA de programacao em portugues chamada NINE-1. "
                 "Responda com codigo Python quando apropriado. "
@@ -296,12 +297,12 @@ def create_ui(engine: NINE1Engine, args) -> None:
     ) as demo:
         gr.HTML(f"""
         <div style="text-align: center; padding: 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; margin-bottom: 1rem;">
-            <h1 style="color: white; margin: 0; font-size: 2.2rem;">🐉 NINE-1</h1>
+            <h1 style="color: white; margin: 0; font-size: 2.2rem;">NINE-1</h1>
             <p style="color: rgba(255,255,255,0.9); margin: 0.5rem 0 0; font-size: 1.1rem;">
-                IA de Programação em Português
+                IA de Programacao em Portugues
             </p>
             <p style="color: rgba(255,255,255,0.7); margin: 0.25rem 0 0; font-size: 0.9rem;">
-                {engine.model.num_params()/1e6:.1f}M parâmetros | PoC construída do zero
+                {engine.model.num_params()/1e6:.1f}M parametros | Poc construida do zero
             </p>
         </div>
         """)
@@ -310,8 +311,8 @@ def create_ui(engine: NINE1Engine, args) -> None:
             with gr.Column(scale=3):
                 # Chat area
                 chatbot = gr.Chatbot(
-                    label="💬 Chat NINE-1",
-                    placeholder="Digite um prompt em português para gerar código...",
+                    label="Chat NINE-1",
+                    placeholder="Digite um prompt em portugues para gerar codigo...",
                     height=500,
                     bubble_full_width=False,
                     render=False,
@@ -321,80 +322,83 @@ def create_ui(engine: NINE1Engine, args) -> None:
                 with gr.Group():
                     msg = gr.Textbox(
                         label="Seu prompt",
-                        placeholder="Ex: escreva uma função fibonacci em python",
+                        placeholder="Ex: escreva uma funcao fibonacci em python",
                         lines=2,
                         max_lines=6,
                     )
                     with gr.Row():
-                        submit_btn = gr.Button("🚀 Gerar", variant="primary", scale=2)
-                        clear_btn = gr.Button("🗑️ Limpar", scale=1)
+                        submit_btn = gr.Button("Gerar", variant="primary", scale=2)
+                        clear_btn = gr.Button("Limpar", scale=1)
 
             with gr.Column(scale=1):
-                gr.Markdown("### ⚙️ Parâmetros")
+                gr.Markdown("### Parametros")
                 temperature = gr.Slider(
-                    minimum=0.1, maximum=2.0, value=0.8, step=0.05,
+                    minimum=0.1, maximum=2.0, value=0.4, step=0.05,
                     label="Temperatura",
-                    info="Mais alto = mais criativo",
+                    info="Mais baixo = mais deterministico (recomendado 0.3-0.5)",
                 )
                 top_k = gr.Slider(
-                    minimum=0, maximum=100, value=40, step=1,
+                    minimum=0, maximum=100, value=20, step=1,
                     label="Top-K",
-                    info="Amostra dos K tokens mais prováveis (0 = desligado)",
+                    info="Amostra dos K tokens mais provaveis (0 = desligado)",
                 )
                 top_p = gr.Slider(
-                    minimum=0.0, maximum=1.0, value=0.9, step=0.05,
+                    minimum=0.0, maximum=1.0, value=0.0, step=0.05,
                     label="Top-P (nucleus)",
-                    info="Probabilidade acumulada",
+                    info="0 = desligado (usa Top-K apenas)",
                 )
                 max_tokens = gr.Slider(
                     minimum=16, maximum=MAX_NEW_TOKENS, value=200, step=16,
-                    label="Máx. tokens",
-                    info="Tamanho máximo da resposta",
+                    label="Max. tokens",
+                    info="Tamanho maximo da resposta",
                 )
 
                 gr.Markdown("---")
-                gr.Markdown("### 📋 Modo")
+                gr.Markdown("### Modo")
                 mode = gr.Radio(
                     choices=["instruct", "chat"],
-                    value="chat",
+                    value="instruct",
                     label="Modo de prompt",
-                    info="instruct: formato tarefa/solução",
+                    info="instruct: formato tarefa/solucao (recomendado)",
                 )
 
         gr.Examples(
             examples=[
-                ["escreva uma função fibonacci em python"],
+                ["escreva uma funcao fibonacci em python"],
                 ["crie uma classe Pilha em python"],
-                ["escreva uma função que valida email"],
-                ["faça um bubble sort em python"],
+                ["escreva uma funcao que valida email"],
+                ["faca um bubble sort em python"],
                 ["como ler um arquivo CSV em python?"],
-                ["crie uma função que calcula o IMC"],
+                ["crie uma funcao que calcula o IMC"],
+                ["escreva uma funcao que soma todos os pares de uma lista"],
+                ["crie um gerador de numeros primos"],
             ],
             inputs=msg,
-            label="📌 Exemplos rápidos",
+            label="Exemplos rapidos",
         )
 
-        with gr.Accordion("📖 Sobre o NINE-1", open=False):
+        with gr.Accordion("Sobre o NINE-1", open=False):
             gr.Markdown("""
-            **NINE-1** é uma IA de geração de código **construída do zero** 
-            em PyTorch — do tokenizer BPE ao Transformer decoder — focada 
-            em **português brasileiro**.
+            **NINE-1** e uma IA de geracao de codigo **construida do zero**
+            em PyTorch — do tokenizer BPE ao Transformer decoder — focada
+            em **portugues brasileiro**.
 
             **Arquitetura:**
             - Tokenizer BPE byte-level (GPT-2 style)
             - Transformer decoder com RoPE + RMSNorm + FlashAttention
-            - Fine-tuning LoRA para instruções em PT-BR
-            - KV Cache para geração eficiente
+            - Fine-tuning LoRA para instrucoes em PT-BR
+            - KV Cache para geracao eficiente
 
-            **Limitações (honestas):**
-            - Modelo pequeno (~10-50M params) — não é GPT-4
+            **Limitacoes (honestas):**
+            - Modelo pequeno (~10-50M params) — nao e GPT-4
             - Corpus de treino limitado
-            - Pode gerar código incorreto — sempre revise
+            - Pode gerar codigo incorreto — sempre revise
+            - Melhor com prompts no formato # tarefa / # solucao
             """)
 
         gr.HTML("""
         <div style="text-align: center; padding: 1rem; color: #666; font-size: 0.85rem;">
-            Feito do zero com PyTorch 🧠 | 
+            Feito do zero com PyTorch |
             <a href="https://github.com/Vtgamer998/nine-1" target="_blank">GitHub</a>
         </div>
         """)
@@ -444,11 +448,28 @@ def create_ui(engine: NINE1Engine, args) -> None:
 
 def parse_args():
     p = argparse.ArgumentParser(description="NINE-1 Web UI (Gradio)")
-    p.add_argument("--ckpt", type=str, default="nine/data/nine1-base.pt",
+
+    # Auto-detect checkpoint: prefere o maior (nine1-base-g.pt)
+    default_ckpt = "nine/data/nine1-base.pt"
+    ckpt_g = "nine/data/nine1-base-g.pt"
+    if os.path.exists(ckpt_g) and os.path.getsize(ckpt_g) > 50_000_000:
+        default_ckpt = ckpt_g
+
+    default_tok = "nine/data/nine1-tok.json"
+    tok_g = "nine/data/nine1-tok-g.json"
+    if os.path.exists(tok_g):
+        default_tok = tok_g
+
+    default_lora = "nine/data/nine1-instruct.pt"
+    lora_g = "nine/data/nine1-lora-g.pt"
+    if os.path.exists(lora_g):
+        default_lora = lora_g
+
+    p.add_argument("--ckpt", type=str, default=default_ckpt,
                    help="Checkpoint base .pt")
-    p.add_argument("--lora", type=str, default=None,
+    p.add_argument("--lora", type=str, default=default_lora,
                    help="Checkpoint LoRA opcional .pt")
-    p.add_argument("--tok", type=str, default="nine/data/nine1-tok.json",
+    p.add_argument("--tok", type=str, default=default_tok,
                    help="Tokenizer BPE .json")
     p.add_argument("--host", type=str, default="127.0.0.1", help="Host")
     p.add_argument("--port", type=int, default=7860, help="Porta")
@@ -468,17 +489,19 @@ def main():
     # Validacoes
     if not os.path.exists(args.ckpt):
         print(f"[webui] Erro: checkpoint nao encontrado: {args.ckpt}", file=sys.stderr)
+        print(f"[webui] Verifique se o arquivo existe ou use --ckpt <caminho>", file=sys.stderr)
         sys.exit(1)
 
     print(f"Inicializando NINE-1 Web UI...")
     print(f"  Checkpoint: {args.ckpt}")
     print(f"  LoRA: {args.lora or 'nenhum'}")
+    print(f"  Tokenizer: {args.tok}")
     print(f"  Device: {args.device}")
 
     # Carrega modelo
     engine = NINE1Engine(
         ckpt_path=args.ckpt,
-        lora_path=args.lora,
+        lora_path=args.lora if os.path.exists(args.lora) else None,
         tokenizer_path=args.tok,
         device=args.device,
         lora_r=args.lora_r,

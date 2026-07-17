@@ -70,8 +70,8 @@ def add_lora(model: NINE1, r: int = 8, alpha: int = 16,
     """Aplica LoRA nas camadas especificadas.
 
     target:
-      "qkv"  — apenas Q,K,V (c_attn) [recomendado, Hu et al. 2021]
-      "all"  — Q,K,V,O + MLP (compat retroativo)
+      "qkv"  — apenas Q,K,V (q_proj, k_proj, v_proj) [recomendado, Hu et al. 2021]
+      "all"  — Q,K,V,O + MLP
       "qkvo" — Q,K,V,O
     """
     if r <= 0:
@@ -84,8 +84,16 @@ def add_lora(model: NINE1, r: int = 8, alpha: int = 16,
         mlp = block.mlp
 
         if target in ("qkv", "all", "qkvo"):
-            attn.c_attn = LoRALinear(attn.c_attn, r=r, alpha=alpha, dropout=dropout)
-            n_mod += 1
+            # GQA: projecoes separadas para Q, K, V
+            if hasattr(attn, 'q_proj'):
+                attn.q_proj = LoRALinear(attn.q_proj, r=r, alpha=alpha, dropout=dropout)
+                attn.k_proj = LoRALinear(attn.k_proj, r=r, alpha=alpha, dropout=dropout)
+                attn.v_proj = LoRALinear(attn.v_proj, r=r, alpha=alpha, dropout=dropout)
+                n_mod += 3
+            elif hasattr(attn, 'c_attn'):
+                # Compat retroativo: modelo pre-GQA
+                attn.c_attn = LoRALinear(attn.c_attn, r=r, alpha=alpha, dropout=dropout)
+                n_mod += 1
         if target in ("all", "qkvo"):
             attn.c_proj = LoRALinear(attn.c_proj, r=r, alpha=alpha, dropout=dropout)
             n_mod += 1

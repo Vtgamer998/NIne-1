@@ -261,10 +261,14 @@ class CausalSelfAttention(nn.Module):
         self.register_buffer("_freqs_cos", None, persistent=False)
         self.register_buffer("_freqs_sin", None, persistent=False)
 
-    def _maybe_init_rope(self, device: str):
-        if self._freqs_cos is not None and self._freqs_cos.device == torch.device(device):
+    def _maybe_init_rope(self, device: str, min_len: int = 0):
+        # Aloca buffer suficiente: no minimo block_size * 2 para geracao com cache
+        needed = max(self.mask.size(-1) * 2, min_len)
+        if (self._freqs_cos is not None
+                and self._freqs_cos.device == torch.device(device)
+                and self._freqs_cos.size(2) >= needed):
             return
-        cos, sin = precompute_freqs_cis(self.head_dim, self.mask.size(-1), device=device)
+        cos, sin = precompute_freqs_cis(self.head_dim, needed, device=device)
         self.register_buffer("_freqs_cos", cos, persistent=False)
         self.register_buffer("_freqs_sin", sin, persistent=False)
 
@@ -292,11 +296,18 @@ class CausalSelfAttention(nn.Module):
         k = self.k_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(B, T, self.n_kv_heads, self.head_dim).transpose(1, 2)
 
-        # Aplica RoPE nas posicoes atuais
+        # Aplica RoPE nas posicoes corretas (com offset do KV Cache)
         if self.use_rope:
-            self._maybe_init_rope(x.device)
-            cos_slice = self._freqs_cos[:, :, :T, :]
-            sin_slice = self._freqs_sin[:, :, :T, :]
+            if kv_cache is not None:
+                k_prev, v_prev = kv_cache
+                pos_start = k_prev.size(2)  # posicao do primeiro token novo no cache
+                max_len = pos_start + T + 64  # folga pra geracao
+            else:
+                pos_start = 0
+                max_len = T
+            self._maybe_init_rope(x.device, min_len=max_len)
+            cos_slice = self._freqs_cos[:, :, pos_start:pos_start + T, :]
+            sin_slice = self._freqs_sin[:, :, pos_start:pos_start + T, :]
             # RoPE precisa de shapes (B, n_head, T, head_dim) e (B, n_kv_heads, T, head_dim)
             q, k = apply_rotary_emb(q, k, cos_slice, sin_slice)
 
@@ -305,6 +316,10 @@ class CausalSelfAttention(nn.Module):
             k_prev, v_prev = kv_cache
             k = torch.cat([k_prev, k], dim=2)
             v = torch.cat([v_prev, v], dim=2)
+
+        # Salva K/V no formato n_kv_heads ANTES de repetir (para o cache)
+        k_pre_repeat = k
+        v_pre_repeat = v
 
         # Expande K/V para o numero de Q heads (GQA)
         k = self._repeat_kv(k, self.n_rep)
@@ -327,7 +342,9 @@ class CausalSelfAttention(nn.Module):
 
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         y = self.c_proj(y)
-        return y, (k, v)
+        # KV Cache retorna k/v ANTES do _repeat_kv (no formato n_kv_heads)
+        # para que a concatencao funcione corretamente
+        return y, (k_pre_repeat, v_pre_repeat)
 
 
 class MLP(nn.Module):
@@ -493,6 +510,10 @@ class NINE1(nn.Module):
             else:
                 idx_cond = idx if idx.size(1) <= self.cfg.block_size else idx[:, -self.cfg.block_size:]
 
+            # Inicializa KV Cache na primeira chamada
+            if use_cache and kv_caches is None:
+                kv_caches = [None] * len(self.transformer.h)
+
             logits, _, kv_caches = self(idx_cond, kv_caches=kv_caches)
             logits = logits[:, -1, :] / temperature
 
@@ -547,7 +568,7 @@ def tiny_config(vocab_size: int = 512, block_size: int = 256) -> NINEConfig:
         block_size=block_size,
         n_layer=6,
         n_head=6,
-        n_kv_heads=4,  # GQA: 6 Q heads, 4 KV heads
+        n_kv_heads=3,  # GQA: 6 Q heads, 3 KV heads (6%3==0)
         n_embd=384,
         dropout=0.0,
         bias=False,

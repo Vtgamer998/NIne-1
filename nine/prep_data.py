@@ -36,8 +36,8 @@ ALLOWED_EXTENSIONS = frozenset({".py", ".txt", ".md", ".js", ".ts", ".java",
                                 ".cpp", ".c", ".cc", ".h", ".hpp", ".rs",
                                 ".go", ".rb", ".php", ".swift", ".kt", ".scala"})
 
-# Tamanho maximo de arquivo (50 MB)
-MAX_FILE_BYTES = 50 * 1024 * 1024
+# Tamanho maximo de arquivo (250 MB)
+MAX_FILE_BYTES = 250 * 1024 * 1024
 # Tamanho maximo do corpus final (500 MB)
 MAX_TOTAL_BYTES = 500 * 1024 * 1024
 # Caracteres suspeitos que indicam arquivo binario
@@ -145,7 +145,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--paths", nargs="+", required=True, help="arquivos ou diretorios com codigo")
     p.add_argument("--out", type=str, default="nine/data/corpus.txt")
-    p.add_argument("--max_chars", type=int, default=50_000_000, help="teto de chars")
+    p.add_argument("--max_chars", type=int, default=250_000_000, help="teto de chars (250M ~ 500MB .bin)")
     p.add_argument("--train_bpe", action="store_true")
     p.add_argument("--vocab", type=int, default=4096)
     p.add_argument("--tok_out", type=str, default="nine/data/nine1-tok.json")
